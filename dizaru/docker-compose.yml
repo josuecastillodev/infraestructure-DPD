@@ -1,0 +1,16 @@
+services:
+  web:
+    image: registry.gitlab.com/GRUPO/dizaru:latest
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dizaru.rule=Host(`dizaru.com`) || Host(`www.dizaru.com`)
+      - traefik.http.routers.dizaru.entrypoints=websecure
+      - traefik.http.routers.dizaru.tls.certresolver=letsencrypt
+      - traefik.http.services.dizaru.loadbalancer.server.port=80
+
+networks:
+  proxy:
+    external: true
