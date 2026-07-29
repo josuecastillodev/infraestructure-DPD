@@ -1,0 +1,111 @@
+services:
+  front:
+    image: registry.gitlab.com/GRUPO/dromo-front:v0.1.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+    mem_limit: 512m
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.services.dromo-front.loadbalancer.server.port=3000
+      # Middlewares de PRE-LANZAMIENTO (quitar al lanzar; ver README, sección "Lanzamiento de dromo"):
+      # (a) basic auth — el valor viene de DROMO_BASIC_AUTH en .env (generar con htpasswd)
+      # (b) noindex — evita indexación por buscadores antes del lanzamiento
+      - traefik.http.middlewares.dromo-auth.basicauth.users=${DROMO_BASIC_AUTH}
+      - traefik.http.middlewares.dromo-noindex.headers.customresponseheaders.X-Robots-Tag=noindex, nofollow
+      # Landing (apex + www)
+      - traefik.http.routers.dromo-landing.rule=Host(`${DROMO_DOMAIN}`) || Host(`www.${DROMO_DOMAIN}`)
+      - traefik.http.routers.dromo-landing.priority=100
+      - traefik.http.routers.dromo-landing.entrypoints=websecure
+      - traefik.http.routers.dromo-landing.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-landing.middlewares=dromo-auth,dromo-noindex
+      - traefik.http.routers.dromo-landing.service=dromo-front
+      # App
+      - traefik.http.routers.dromo-app.rule=Host(`app.${DROMO_DOMAIN}`)
+      - traefik.http.routers.dromo-app.priority=50
+      - traefik.http.routers.dromo-app.entrypoints=websecure
+      - traefik.http.routers.dromo-app.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-app.middlewares=dromo-auth,dromo-noindex
+      - traefik.http.routers.dromo-app.service=dromo-front
+      # Tenants catch-all: matchea también app. y api., por eso su prioridad es la más baja.
+      # Este router declara el certificado wildcard (DNS-01).
+      - traefik.http.routers.dromo-tenants.rule=HostRegexp(`^[a-z0-9-]+\.${DROMO_DOMAIN}$$`)
+      - traefik.http.routers.dromo-tenants.priority=1
+      - traefik.http.routers.dromo-tenants.entrypoints=websecure
+      - traefik.http.routers.dromo-tenants.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-tenants.tls.domains[0].main=${DROMO_DOMAIN}
+      - traefik.http.routers.dromo-tenants.tls.domains[0].sans=*.${DROMO_DOMAIN}
+      - traefik.http.routers.dromo-tenants.middlewares=dromo-auth,dromo-noindex
+      - traefik.http.routers.dromo-tenants.service=dromo-front
+
+  api:
+    image: registry.gitlab.com/GRUPO/dromo-api:v0.1.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=256
+    mem_limit: 384m
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.services.dromo-api.loadbalancer.server.port=3000
+      - traefik.http.routers.dromo-api.rule=Host(`api.${DROMO_DOMAIN}`)
+      - traefik.http.routers.dromo-api.priority=50
+      - traefik.http.routers.dromo-api.entrypoints=websecure
+      - traefik.http.routers.dromo-api.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-api.middlewares=dromo-auth,dromo-noindex
+      - traefik.http.routers.dromo-api.service=dromo-api
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    command: postgres -c shared_buffers=128MB -c max_connections=50
+    env_file:
+      - .env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+volumes:
+  db-data:
+
+networks:
+  proxy:
+    external: true
+  internal:
