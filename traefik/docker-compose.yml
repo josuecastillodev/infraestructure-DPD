@@ -1,16 +1,13 @@
 services:
   traefik:
-    image: traefik:v3.3
+    # v3.6+: requerido con Docker Engine 29 (v3.3 negocia API 1.24, ya no soportada)
+    image: traefik:v3.6
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     env_file:
       - .env
-    environment:
-      # Docker Engine >= 29 exige API >= 1.40 y traefik v3.3 negocia 1.24 por
-      # defecto; sin esto el provider docker no arranca (routers vacíos, 404)
-      DOCKER_API_VERSION: "1.44"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
