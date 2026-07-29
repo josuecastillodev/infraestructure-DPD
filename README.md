@@ -3,7 +3,7 @@
 Repositorio de infraestructura del VPS (Ubuntu 24.04, 4 GB RAM, Docker + Docker Compose v2).
 Describe **qué corre en el servidor**: composes, configuración de Traefik y documentación.
 No contiene código de aplicaciones ni Dockerfiles — las imágenes ya construidas viven en el
-GitLab Container Registry (`registry.gitlab.com`).
+GitHub Container Registry (`ghcr.io`), publicadas por GitHub Actions desde cada repo de producto.
 
 El repo se clona en `/srv/` del servidor.
 
@@ -60,19 +60,32 @@ Convenciones:
 - APIs Node: `mem_limit: 384m` con `NODE_OPTIONS=--max-old-space-size=256`. Los frontends
   son estáticos servidos por nginx (64m).
 - Tags: `pinzon` y `dromo` usan tags inmutables (`v0.1.0`, `v0.2.0`, …); `dizaru` usa `:latest`.
-- Certificados: `letsencrypt` (HTTP-01) para dizaru; `letsencrypt-dns` (DNS-01 vía IONOS) para
-  los wildcards de pinzon y dromo.
+- Certificados: `letsencrypt` (HTTP-01) para dizaru; `letsencrypt-dns` (DNS-01 vía Cloudflare)
+  para los wildcards de pinzon y dromo.
+
+### DNS
+
+Los dominios están registrados en Squarespace, que **no tiene API de DNS** — y el reto
+DNS-01 de los certificados wildcard necesita una. Por eso:
+
+- **dizaru.com**: se queda en Squarespace. Solo necesita registros A (apex y `www`)
+  apuntando al VPS; su certificado sale por HTTP-01.
+- **pinzontravel.com** (y el futuro dominio de dromo): delegar los nameservers a
+  **Cloudflare** (plan free, el dominio sigue registrado en Squarespace). En Cloudflare:
+  registros A para apex, `www`, `app`, `api` y `*` (wildcard) apuntando al VPS, en modo
+  **DNS only** (nube gris — Traefik gestiona el TLS, no el proxy de Cloudflare), y un
+  API token con `Zone:DNS:Edit` para el `CF_DNS_API_TOKEN` de `traefik/.env`.
 
 ### Imágenes pendientes de Dockerfile
 
-Este repo asume estas imágenes en el registry; las que aún no tienen Dockerfile en su
-repo de producto hay que crearlas antes del primer deploy:
+Este repo asume estas imágenes en `ghcr.io/josuecastillodev`; las que aún no tienen
+Dockerfile en su repo de producto hay que crearlas antes del primer deploy:
 
 | Imagen | Repo origen | Estado |
 |---|---|---|
-| `GRUPO/pinzon-web`, `GRUPO/pinzon-api` | Pinzon (`apps/web`, `apps/api`) | Dockerfiles existentes |
-| `GRUPO/dizaru` | dizaru-landing (Astro estático → nginx) | **Falta Dockerfile** |
-| `GRUPO/dromo-web`, `GRUPO/dromo-admin`, `GRUPO/dromo-api` | dromo (`apps/web`, `apps/admin`, `apps/api`) | **Faltan Dockerfiles** |
+| `dizaru` | dizaru-landing (Astro estático → nginx) | Dockerfile + workflow listos |
+| `pinzon-web`, `pinzon-api` | Pinzon (`apps/web`, `apps/api`) | Dockerfiles existentes; falta workflow |
+| `dromo-web`, `dromo-admin`, `dromo-api` | dromo (`apps/web`, `apps/admin`, `apps/api`) | **Faltan Dockerfiles y workflow** |
 
 ### Dependencias externas de dromo
 
@@ -92,8 +105,9 @@ cd /srv
 git clone <URL-del-repo> infraestructure
 cd infraestructure
 
-# 2. Login al GitLab Container Registry con un deploy token (scope read_registry)
-docker login registry.gitlab.com -u <deploy-token-username> -p <deploy-token>
+# 2. Login al GitHub Container Registry con un PAT (classic) de solo lectura
+#    (scope read:packages), generado en https://github.com/settings/tokens
+docker login ghcr.io -u josuecastillodev -p <PAT-read-packages>
 
 # 3. Crear la red compartida del proxy
 docker network create proxy
@@ -182,8 +196,8 @@ dromo está en pre-lanzamiento: sin dominio definitivo y protegido por dos middl
 de Traefik (basic auth y `X-Robots-Tag: noindex, nofollow`). **Quitar esos dos
 middlewares es el procedimiento de lanzamiento.** Pasos:
 
-1. Comprar el dominio real y apuntar su DNS (apex, `www`, `app`, `admin`, `api` y
-   wildcard `*`) al servidor.
+1. Comprar el dominio real, delegar sus nameservers a Cloudflare (ver sección [DNS](#dns))
+   y apuntar apex, `www`, `app`, `admin`, `api` y wildcard `*` al servidor.
 2. En `dromo/.env` del servidor: reemplazar `DROMO_DOMAIN` por el dominio real.
 3. En `dromo/docker-compose.yml` (en el repo, commit + push + `git pull` en el server):
    - Eliminar los dos labels que definen los middlewares

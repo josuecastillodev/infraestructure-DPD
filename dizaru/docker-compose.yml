@@ -1,6 +1,6 @@
 services:
   web:
-    image: registry.gitlab.com/GRUPO/dizaru:latest
+    image: ghcr.io/josuecastillodev/dizaru:latest
     restart: unless-stopped
     networks:
       - proxy

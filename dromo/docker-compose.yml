@@ -1,6 +1,6 @@
 services:
   web:
-    image: registry.gitlab.com/GRUPO/dromo-web:v0.1.0
+    image: ghcr.io/josuecastillodev/dromo-web:v0.1.0
     restart: unless-stopped
     mem_limit: 64m
     depends_on:
@@ -45,7 +45,7 @@ services:
       - traefik.http.routers.dromo-tenants.service=dromo-web
 
   admin:
-    image: registry.gitlab.com/GRUPO/dromo-admin:v0.1.0
+    image: ghcr.io/josuecastillodev/dromo-admin:v0.1.0
     restart: unless-stopped
     mem_limit: 64m
     depends_on:
@@ -66,7 +66,7 @@ services:
       - traefik.http.routers.dromo-admin.service=dromo-admin
 
   api:
-    image: registry.gitlab.com/GRUPO/dromo-api:v0.1.0
+    image: ghcr.io/josuecastillodev/dromo-api:v0.1.0
     restart: unless-stopped
     env_file:
       - .env

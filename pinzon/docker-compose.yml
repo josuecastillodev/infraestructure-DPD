@@ -1,6 +1,6 @@
 services:
   web:
-    image: registry.gitlab.com/GRUPO/pinzon-web:v0.1.0
+    image: ghcr.io/josuecastillodev/pinzon-web:v0.1.0
     restart: unless-stopped
     mem_limit: 64m
     depends_on:
@@ -37,7 +37,7 @@ services:
       - traefik.http.routers.pinzon-tenants.service=pinzon-web
 
   api:
-    image: registry.gitlab.com/GRUPO/pinzon-api:v0.1.0
+    image: ghcr.io/josuecastillodev/pinzon-api:v0.1.0
     restart: unless-stopped
     env_file:
       - .env

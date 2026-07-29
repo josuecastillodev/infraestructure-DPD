@@ -26,14 +26,16 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 
-  # DNS-01 (IONOS): para wildcards de las plataformas (pinzon, dromo)
-  # Requiere IONOS_API_KEY como variable de entorno del contenedor (ver .env)
+  # DNS-01 (Cloudflare): para wildcards de las plataformas (pinzon, dromo).
+  # Squarespace (registrador actual) no tiene API de DNS, así que los dominios
+  # de plataformas delegan sus nameservers a Cloudflare (plan free) y el reto
+  # DNS-01 se resuelve ahí. Requiere CF_DNS_API_TOKEN en el .env.
   letsencrypt-dns:
     acme:
       email: josue.castpon@gmail.com
       storage: /letsencrypt/acme-dns.json
       dnsChallenge:
-        provider: ionos
+        provider: cloudflare
         resolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"
