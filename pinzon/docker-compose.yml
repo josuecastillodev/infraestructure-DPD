@@ -1,12 +1,8 @@
 services:
-  front:
-    image: registry.gitlab.com/GRUPO/pinzon-front:v0.1.0
+  web:
+    image: registry.gitlab.com/GRUPO/pinzon-web:v0.1.0
     restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      NODE_OPTIONS: --max-old-space-size=384
-    mem_limit: 512m
+    mem_limit: 64m
     depends_on:
       api:
         condition: service_started
@@ -16,19 +12,20 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.services.pinzon-front.loadbalancer.server.port=3000
+      # SPA React/Vite servida por nginx (puerto 80 en el contenedor)
+      - traefik.http.services.pinzon-web.loadbalancer.server.port=80
       # Landing (apex + www)
       - traefik.http.routers.pinzon-landing.rule=Host(`pinzontravel.com`) || Host(`www.pinzontravel.com`)
       - traefik.http.routers.pinzon-landing.priority=100
       - traefik.http.routers.pinzon-landing.entrypoints=websecure
       - traefik.http.routers.pinzon-landing.tls.certresolver=letsencrypt-dns
-      - traefik.http.routers.pinzon-landing.service=pinzon-front
+      - traefik.http.routers.pinzon-landing.service=pinzon-web
       # App
       - traefik.http.routers.pinzon-app.rule=Host(`app.pinzontravel.com`)
       - traefik.http.routers.pinzon-app.priority=50
       - traefik.http.routers.pinzon-app.entrypoints=websecure
       - traefik.http.routers.pinzon-app.tls.certresolver=letsencrypt-dns
-      - traefik.http.routers.pinzon-app.service=pinzon-front
+      - traefik.http.routers.pinzon-app.service=pinzon-web
       # Tenants catch-all: matchea también app. y api., por eso su prioridad es la más baja.
       # Este router declara el certificado wildcard (DNS-01).
       - traefik.http.routers.pinzon-tenants.rule=HostRegexp(`^[a-z0-9-]+\.pinzontravel\.com$$`)
@@ -37,7 +34,7 @@ services:
       - traefik.http.routers.pinzon-tenants.tls.certresolver=letsencrypt-dns
       - traefik.http.routers.pinzon-tenants.tls.domains[0].main=pinzontravel.com
       - traefik.http.routers.pinzon-tenants.tls.domains[0].sans=*.pinzontravel.com
-      - traefik.http.routers.pinzon-tenants.service=pinzon-front
+      - traefik.http.routers.pinzon-tenants.service=pinzon-web
 
   api:
     image: registry.gitlab.com/GRUPO/pinzon-api:v0.1.0
@@ -47,10 +44,10 @@ services:
     environment:
       NODE_OPTIONS: --max-old-space-size=256
     mem_limit: 384m
+    # El entrypoint de la imagen ejecuta `prisma migrate deploy` al arrancar
+    # (y el seed si SEED_ON_START=true), por eso exige db healthy.
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - proxy
@@ -75,18 +72,6 @@ services:
       - db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
