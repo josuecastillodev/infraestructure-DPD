@@ -1,0 +1,102 @@
+services:
+  front:
+    image: registry.gitlab.com/GRUPO/pinzon-front:v0.1.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+    mem_limit: 512m
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.services.pinzon-front.loadbalancer.server.port=3000
+      # Landing (apex + www)
+      - traefik.http.routers.pinzon-landing.rule=Host(`pinzontravel.com`) || Host(`www.pinzontravel.com`)
+      - traefik.http.routers.pinzon-landing.priority=100
+      - traefik.http.routers.pinzon-landing.entrypoints=websecure
+      - traefik.http.routers.pinzon-landing.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.pinzon-landing.service=pinzon-front
+      # App
+      - traefik.http.routers.pinzon-app.rule=Host(`app.pinzontravel.com`)
+      - traefik.http.routers.pinzon-app.priority=50
+      - traefik.http.routers.pinzon-app.entrypoints=websecure
+      - traefik.http.routers.pinzon-app.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.pinzon-app.service=pinzon-front
+      # Tenants catch-all: matchea también app. y api., por eso su prioridad es la más baja.
+      # Este router declara el certificado wildcard (DNS-01).
+      - traefik.http.routers.pinzon-tenants.rule=HostRegexp(`^[a-z0-9-]+\.pinzontravel\.com$$`)
+      - traefik.http.routers.pinzon-tenants.priority=1
+      - traefik.http.routers.pinzon-tenants.entrypoints=websecure
+      - traefik.http.routers.pinzon-tenants.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.pinzon-tenants.tls.domains[0].main=pinzontravel.com
+      - traefik.http.routers.pinzon-tenants.tls.domains[0].sans=*.pinzontravel.com
+      - traefik.http.routers.pinzon-tenants.service=pinzon-front
+
+  api:
+    image: registry.gitlab.com/GRUPO/pinzon-api:v0.1.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=256
+    mem_limit: 384m
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.services.pinzon-api.loadbalancer.server.port=3000
+      - traefik.http.routers.pinzon-api.rule=Host(`api.pinzontravel.com`)
+      - traefik.http.routers.pinzon-api.priority=50
+      - traefik.http.routers.pinzon-api.entrypoints=websecure
+      - traefik.http.routers.pinzon-api.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.pinzon-api.service=pinzon-api
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    command: postgres -c shared_buffers=128MB -c max_connections=50
+    env_file:
+      - .env
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+volumes:
+  db-data:
+
+networks:
+  proxy:
+    external: true
+  internal:
