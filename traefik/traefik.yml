@@ -1,0 +1,39 @@
+# Configuración estática de Traefik v3
+# Este archivo se monta read-only en el contenedor (ver docker-compose.yml).
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: proxy
+
+certificatesResolvers:
+  # HTTP-01: para landings con dominio simple (dizaru)
+  letsencrypt:
+    acme:
+      email: josue.castpon@gmail.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+  # DNS-01 (IONOS): para wildcards de las plataformas (pinzon, dromo)
+  # Requiere IONOS_API_KEY como variable de entorno del contenedor (ver .env)
+  letsencrypt-dns:
+    acme:
+      email: josue.castpon@gmail.com
+      storage: /letsencrypt/acme-dns.json
+      dnsChallenge:
+        provider: ionos
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
