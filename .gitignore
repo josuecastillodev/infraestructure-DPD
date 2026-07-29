@@ -1,4 +1,5 @@
 .env
 letsencrypt/
 *.log
+dromo/pgbouncer/userlist.txt
 .DS_Store

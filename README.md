@@ -21,13 +21,19 @@ El repo se clona en `/srv/` del servidor.
 ├── dizaru/                  # Landing estática (Astro + nginx) — dizaru.com
 │   ├── docker-compose.yml
 │   └── .env.example
-├── pinzon/                  # Plataforma multi-tenant PRODUCTIVA — pinzontravel.com
-│   ├── docker-compose.yml   # front (Next.js), api (NestJS), db (Postgres 17), redis (Redis 7)
+├── pinzon/                  # Plataforma DEMO para clientes — pinzontravel.com
+│   ├── docker-compose.yml   # web (SPA React/nginx), api (NestJS+Prisma), db (Postgres 17)
 │   └── .env.example
-└── dromo/                   # Plataforma multi-tenant en PRE-LANZAMIENTO (idéntica a pinzon)
-    ├── docker-compose.yml
-    └── .env.example
+└── dromo/                   # Plataforma multi-tenant en PRE-LANZAMIENTO
+    ├── docker-compose.yml   # web + admin (SPA/nginx), api (NestJS), db, pgbouncer, redis
+    ├── .env.example
+    ├── postgres/init.sh     # Bootstrap del cluster (route_control, usuarios, auth_query)
+    └── pgbouncer/           # pgbouncer.ini + userlist.txt.example (el .txt real NO se versiona)
 ```
+
+> **Nota sobre pinzon**: es la plataforma demo para mostrar a clientes y se mantiene
+> deliberadamente simple (una sola DB, sin Redis, sin PgBouncer). Eventualmente migrará
+> a una infraestructura similar a la de dromo.
 
 Arquitectura de red:
 
@@ -35,13 +41,14 @@ Arquitectura de red:
 Internet ──▶ Traefik v3 (:80 → :443)          red externa "proxy"
                │
                ├─ dizaru.com ───────────────▶ dizaru/web (nginx)
-               ├─ pinzontravel.com, www, app, *.tenants ─▶ pinzon/front
+               ├─ pinzontravel.com, www, app, *.tenants ─▶ pinzon/web (nginx SPA)
                ├─ api.pinzontravel.com ─────▶ pinzon/api
-               ├─ ${DROMO_DOMAIN}, www, app, *.tenants ──▶ dromo/front   (+ basic auth + noindex)
-               └─ api.${DROMO_DOMAIN} ──────▶ dromo/api                  (+ basic auth + noindex)
+               ├─ ${DROMO_DOMAIN}, www, app, *.tenants ──▶ dromo/web    (+ basic auth + noindex)
+               ├─ admin.${DROMO_DOMAIN} ────▶ dromo/admin               (+ basic auth + noindex)
+               └─ api.${DROMO_DOMAIN} ──────▶ dromo/api                 (+ basic auth + noindex)
 
-pinzon/db, pinzon/redis, dromo/db, dromo/redis: SOLO en la red interna de su
-proyecto, sin puertos publicados.
+Solo en redes internas (sin puertos publicados):
+  pinzon/db · dromo/db · dromo/pgbouncer · dromo/redis
 ```
 
 Convenciones:
@@ -50,10 +57,30 @@ Convenciones:
 - `exposedByDefault: false`: cada servicio expuesto lleva `traefik.enable=true` explícito.
 - Servicios con más de una red llevan `traefik.docker.network=proxy`.
 - Todos los servicios: `restart: unless-stopped`.
-- Servicios Node: `mem_limit` (384m APIs, 512m Next.js) con `NODE_OPTIONS=--max-old-space-size` coherente.
+- APIs Node: `mem_limit: 384m` con `NODE_OPTIONS=--max-old-space-size=256`. Los frontends
+  son estáticos servidos por nginx (64m).
 - Tags: `pinzon` y `dromo` usan tags inmutables (`v0.1.0`, `v0.2.0`, …); `dizaru` usa `:latest`.
 - Certificados: `letsencrypt` (HTTP-01) para dizaru; `letsencrypt-dns` (DNS-01 vía IONOS) para
   los wildcards de pinzon y dromo.
+
+### Imágenes pendientes de Dockerfile
+
+Este repo asume estas imágenes en el registry; las que aún no tienen Dockerfile en su
+repo de producto hay que crearlas antes del primer deploy:
+
+| Imagen | Repo origen | Estado |
+|---|---|---|
+| `GRUPO/pinzon-web`, `GRUPO/pinzon-api` | Pinzon (`apps/web`, `apps/api`) | Dockerfiles existentes |
+| `GRUPO/dizaru` | dizaru-landing (Astro estático → nginx) | **Falta Dockerfile** |
+| `GRUPO/dromo-web`, `GRUPO/dromo-admin`, `GRUPO/dromo-api` | dromo (`apps/web`, `apps/admin`, `apps/api`) | **Faltan Dockerfiles** |
+
+### Dependencias externas de dromo
+
+- **Infisical**: la API lee sus secretos de negocio (JWT, S3/R2, SMTP…) de Infisical en
+  runtime; el `.env` solo lleva las credenciales machine identity y la infraestructura local.
+- **S3/R2**: almacenamiento de objetos en producción (Cloudflare R2); el CORS del bucket
+  se configura en R2, no aquí.
+- **SMTP**: proveedor de correo transaccional.
 
 ## Bootstrap en un servidor nuevo
 
@@ -78,8 +105,9 @@ cp pinzon/.env.example  pinzon/.env
 cp dromo/.env.example   dromo/.env
 # editar cada .env con credenciales reales
 
-# 5. Directorio de certificados de Traefik
+# 5. Directorio de certificados de Traefik y userlist provisional de PgBouncer
 mkdir -p traefik/letsencrypt
+cp dromo/pgbouncer/userlist.txt.example dromo/pgbouncer/userlist.txt
 
 # 6. Arrancar en orden: traefik → dizaru → pinzon → dromo
 docker compose -f traefik/docker-compose.yml up -d
@@ -88,22 +116,46 @@ docker compose -f pinzon/docker-compose.yml up -d
 docker compose -f dromo/docker-compose.yml up -d
 ```
 
+### PgBouncer de dromo: generar userlist.txt (primera vez)
+
+PgBouncer usa auth_query, pero necesita el hash SCRAM real de `pgbouncer_authenticator`
+para autenticarse él mismo contra Postgres:
+
+```bash
+docker compose -f dromo/docker-compose.yml exec db \
+  psql -U postgres -d postgres -t -A -c \
+  "SELECT '\"' || rolname || '\" \"' || rolpassword || '\"' FROM pg_authid WHERE rolname = 'pgbouncer_authenticator'"
+```
+
+Copiar la línea resultante a `dromo/pgbouncer/userlist.txt` (reemplazando el contenido
+de ejemplo) y reiniciar:
+
+```bash
+docker compose -f dromo/docker-compose.yml restart pgbouncer
+```
+
+`userlist.txt` está en `.gitignore`: contiene material de autenticación y vive solo en el servidor.
+
 ## Operaciones comunes
 
 ### Desplegar una nueva versión (pinzon / dromo)
 
 1. En el repo: editar el tag de la imagen en el `docker-compose.yml` del proyecto
-   (p. ej. `pinzon-front:v0.1.0` → `pinzon-front:v0.2.0`) y hacer commit + push.
+   (p. ej. `dromo-api:v0.1.0` → `dromo-api:v0.2.0`) y hacer commit + push.
 2. En el servidor:
 
 ```bash
 cd /srv/infraestructure
 git pull
-docker compose -f pinzon/docker-compose.yml pull
-docker compose -f pinzon/docker-compose.yml up -d
+docker compose -f dromo/docker-compose.yml pull
+docker compose -f dromo/docker-compose.yml up -d
 ```
 
 Para dizaru (`:latest`) no hay que editar nada: basta `pull && up -d`.
+
+> La API de pinzon ejecuta `prisma migrate deploy` en su entrypoint: cada deploy aplica
+> las migraciones pendientes automáticamente. Con `SEED_ON_START=true` además puebla la
+> demo (dejar en `false` tras el primer arranque).
 
 ### Ver logs de emisión de certificados
 
@@ -130,7 +182,8 @@ dromo está en pre-lanzamiento: sin dominio definitivo y protegido por dos middl
 de Traefik (basic auth y `X-Robots-Tag: noindex, nofollow`). **Quitar esos dos
 middlewares es el procedimiento de lanzamiento.** Pasos:
 
-1. Comprar el dominio real y apuntar su DNS (apex, `www`, `app`, `api` y wildcard `*`) al servidor.
+1. Comprar el dominio real y apuntar su DNS (apex, `www`, `app`, `admin`, `api` y
+   wildcard `*`) al servidor.
 2. En `dromo/.env` del servidor: reemplazar `DROMO_DOMAIN` por el dominio real.
 3. En `dromo/docker-compose.yml` (en el repo, commit + push + `git pull` en el server):
    - Eliminar los dos labels que definen los middlewares
@@ -161,27 +214,37 @@ El certificado sale solo por HTTP-01 (resolver `letsencrypt`); no hay que tocar 
 
 Qué hay que respaldar (fuera del servidor, de forma periódica):
 
-- **Bases de datos**: dump lógico de cada Postgres:
+- **Pinzon** (una sola DB): dump lógico:
 
   ```bash
   docker compose -f pinzon/docker-compose.yml exec db pg_dump -U pinzon -d pinzon > pinzon-$(date +%F).sql
-  docker compose -f dromo/docker-compose.yml  exec db pg_dump -U dromo  -d dromo  > dromo-$(date +%F).sql
   ```
 
-- **Los `.env` reales** de cada carpeta (no están en git; guardarlos en un gestor de secretos).
+- **Dromo** (control plane + una DB por tenant): dump del cluster completo:
+
+  ```bash
+  docker compose -f dromo/docker-compose.yml exec db pg_dumpall -U postgres > dromo-$(date +%F).sql
+  ```
+
+- **Los `.env` reales** de cada carpeta y `dromo/pgbouncer/userlist.txt`
+  (no están en git; guardarlos en un gestor de secretos).
+- Los secretos de negocio de dromo viven en **Infisical** (respaldo propio, fuera de este server).
 - `traefik/letsencrypt/` es prescindible: los certificados se re-emiten solos.
-- Redis se usa como caché/colas efímeras: no requiere backup.
+- Redis de dromo guarda colas BullMQ: tolerable perderlo (se reencolan trabajos), no se respalda.
 
 Restauración en un servidor nuevo:
 
 1. Seguir el [bootstrap](#bootstrap-en-un-servidor-nuevo) completo (los `.env` salen del
    gestor de secretos, no de los example).
-2. Arrancar pinzon/dromo y restaurar cada dump:
+2. Arrancar cada proyecto y restaurar los dumps:
 
    ```bash
    docker compose -f pinzon/docker-compose.yml exec -T db psql -U pinzon -d pinzon < pinzon-YYYY-MM-DD.sql
+   docker compose -f dromo/docker-compose.yml  exec -T db psql -U postgres -d postgres < dromo-YYYY-MM-DD.sql
    ```
 
+   (En dromo, `pg_dumpall` restaura roles y todas las DBs; regenerar después
+   `pgbouncer/userlist.txt` como en el bootstrap.)
 3. Verificar certificados en los logs de Traefik y probar cada dominio.
 
 Las imágenes no se respaldan: viven en el registry de GitLab y se re-descargan con `pull`.
