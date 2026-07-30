@@ -1,0 +1,27 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Un deploy a la vez; si llegan varios pushes seguidos, el último gana
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy al VPS por SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Host key fijado (pinned) del VPS
+          echo "198.251.68.114 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK4DRzgdbv/oGBVwUMlJxbgGd/Xoh0SMvZkTqhI0WkNZ" > ~/.ssh/known_hosts
+          # La llave tiene forced command: solo puede ejecutar "deploy <stack>"
+          ssh -o BatchMode=yes josue@198.251.68.114 deploy all
