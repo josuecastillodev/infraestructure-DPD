@@ -23,14 +23,14 @@ services:
       - traefik.http.routers.dromo-landing.rule=Host(`${DROMO_DOMAIN}`) || Host(`www.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-landing.priority=100
       - traefik.http.routers.dromo-landing.entrypoints=websecure
-      - traefik.http.routers.dromo-landing.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-landing.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-landing.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-landing.service=dromo-web
       # App
       - traefik.http.routers.dromo-app.rule=Host(`app.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-app.priority=50
       - traefik.http.routers.dromo-app.entrypoints=websecure
-      - traefik.http.routers.dromo-app.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-app.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-app.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-app.service=dromo-web
       # Tenants catch-all: matchea también app., api. y admin., por eso su prioridad es la más baja.
@@ -38,7 +38,7 @@ services:
       - traefik.http.routers.dromo-tenants.rule=HostRegexp(`^[a-z0-9-]+\.${DROMO_DOMAIN}$$`)
       - traefik.http.routers.dromo-tenants.priority=1
       - traefik.http.routers.dromo-tenants.entrypoints=websecure
-      - traefik.http.routers.dromo-tenants.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-tenants.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-tenants.tls.domains[0].main=${DROMO_DOMAIN}
       - traefik.http.routers.dromo-tenants.tls.domains[0].sans=*.${DROMO_DOMAIN}
       - traefik.http.routers.dromo-tenants.middlewares=dromo-auth,dromo-noindex
@@ -61,7 +61,7 @@ services:
       - traefik.http.routers.dromo-admin.rule=Host(`admin.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-admin.priority=50
       - traefik.http.routers.dromo-admin.entrypoints=websecure
-      - traefik.http.routers.dromo-admin.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-admin.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-admin.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-admin.service=dromo-admin
 
@@ -90,7 +90,7 @@ services:
       - traefik.http.routers.dromo-api.rule=Host(`api.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-api.priority=50
       - traefik.http.routers.dromo-api.entrypoints=websecure
-      - traefik.http.routers.dromo-api.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.dromo-api.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-api.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-api.service=dromo-api
 

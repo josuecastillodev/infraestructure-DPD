@@ -39,3 +39,16 @@ certificatesResolvers:
         resolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"
+
+  # DNS-01 (DuckDNS): para la demo de dromo sin dominio propio
+  # (*.xxx.duckdns.org). Requiere DUCKDNS_TOKEN en el .env. Al comprar el
+  # dominio real de dromo, este resolver deja de usarse (no hace falta borrarlo).
+  letsencrypt-duckdns:
+    acme:
+      email: josue.castpon@gmail.com
+      storage: /letsencrypt/acme-duckdns.json
+      dnsChallenge:
+        provider: duckdns
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
