@@ -19,12 +19,16 @@ services:
       # (b) noindex — evita indexación por buscadores antes del lanzamiento
       - traefik.http.middlewares.dromo-auth.basicauth.users=${DROMO_BASIC_AUTH}
       - traefik.http.middlewares.dromo-noindex.headers.customresponseheaders.X-Robots-Tag=noindex, nofollow
-      # Landing (apex + www)
+      # Apex + www: aún no hay landing de dromo → redirect al sistema en app.
+      # (cuando exista la landing, reemplazar este redirect por su servicio, como en pinzon)
+      - traefik.http.middlewares.dromo-to-app.redirectregex.regex=^https://(www\.)?${DROMO_DOMAIN}/(.*)
+      - traefik.http.middlewares.dromo-to-app.redirectregex.replacement=https://app.${DROMO_DOMAIN}/$${2}
+      - traefik.http.middlewares.dromo-to-app.redirectregex.permanent=false
       - traefik.http.routers.dromo-landing.rule=Host(`${DROMO_DOMAIN}`) || Host(`www.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-landing.priority=100
       - traefik.http.routers.dromo-landing.entrypoints=websecure
       - traefik.http.routers.dromo-landing.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
-      - traefik.http.routers.dromo-landing.middlewares=dromo-auth,dromo-noindex
+      - traefik.http.routers.dromo-landing.middlewares=dromo-to-app,dromo-noindex
       - traefik.http.routers.dromo-landing.service=dromo-web
       # App
       - traefik.http.routers.dromo-app.rule=Host(`app.${DROMO_DOMAIN}`)

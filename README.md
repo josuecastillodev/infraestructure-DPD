@@ -44,7 +44,8 @@ Internet ──▶ Traefik v3 (:80 → :443)          red externa "proxy"
                ├─ pinzontravel.com, www ───▶ pinzon/landing (nginx, Astro)
                ├─ app.pinzontravel.com, *.tenants ─▶ pinzon/web (nginx SPA)
                ├─ api.pinzontravel.com ─────▶ pinzon/api
-               ├─ ${DROMO_DOMAIN}, www, app, *.tenants ──▶ dromo/web    (+ basic auth + noindex)
+               ├─ ${DROMO_DOMAIN}, www ────▶ redirect a app. (sin landing aún)
+               ├─ app.${DROMO_DOMAIN}, *.tenants ──▶ dromo/web  (+ basic auth + noindex)
                ├─ admin.${DROMO_DOMAIN} ────▶ dromo/admin               (+ basic auth + noindex)
                └─ api.${DROMO_DOMAIN} ──────▶ dromo/api                 (+ basic auth + noindex)
 
