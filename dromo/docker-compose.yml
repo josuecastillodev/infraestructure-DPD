@@ -98,6 +98,10 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     command: postgres -c shared_buffers=128MB -c max_connections=50
+    # Solo loopback del host: acceso exclusivo vía túnel SSH (TablePlus, psql…);
+    # NO expone Postgres a internet.
+    ports:
+      - "127.0.0.1:5433:5432"
     env_file:
       - .env
     volumes:
