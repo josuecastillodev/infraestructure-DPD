@@ -1,4 +1,22 @@
 services:
+  landing:
+    image: ghcr.io/josuecastillodev/pinzon-landing:latest
+    restart: unless-stopped
+    mem_limit: 64m
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      # Landing Astro estática servida por nginx (puerto 80 en el contenedor)
+      - traefik.http.services.pinzon-landing.loadbalancer.server.port=80
+      # Landing (apex + www)
+      - traefik.http.routers.pinzon-landing.rule=Host(`pinzontravel.com`) || Host(`www.pinzontravel.com`)
+      - traefik.http.routers.pinzon-landing.priority=100
+      - traefik.http.routers.pinzon-landing.entrypoints=websecure
+      - traefik.http.routers.pinzon-landing.tls.certresolver=letsencrypt-dns
+      - traefik.http.routers.pinzon-landing.service=pinzon-landing
+
   web:
     image: ghcr.io/josuecastillodev/pinzon-web:v0.1.0
     restart: unless-stopped
@@ -14,12 +32,6 @@ services:
       - traefik.docker.network=proxy
       # SPA React/Vite servida por nginx (puerto 80 en el contenedor)
       - traefik.http.services.pinzon-web.loadbalancer.server.port=80
-      # Landing (apex + www)
-      - traefik.http.routers.pinzon-landing.rule=Host(`pinzontravel.com`) || Host(`www.pinzontravel.com`)
-      - traefik.http.routers.pinzon-landing.priority=100
-      - traefik.http.routers.pinzon-landing.entrypoints=websecure
-      - traefik.http.routers.pinzon-landing.tls.certresolver=letsencrypt-dns
-      - traefik.http.routers.pinzon-landing.service=pinzon-web
       # App
       - traefik.http.routers.pinzon-app.rule=Host(`app.pinzontravel.com`)
       - traefik.http.routers.pinzon-app.priority=50

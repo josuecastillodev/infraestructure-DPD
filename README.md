@@ -41,7 +41,8 @@ Arquitectura de red:
 Internet ──▶ Traefik v3 (:80 → :443)          red externa "proxy"
                │
                ├─ dizaru.com ───────────────▶ dizaru/web (nginx)
-               ├─ pinzontravel.com, www, app, *.tenants ─▶ pinzon/web (nginx SPA)
+               ├─ pinzontravel.com, www ───▶ pinzon/landing (nginx, Astro)
+               ├─ app.pinzontravel.com, *.tenants ─▶ pinzon/web (nginx SPA)
                ├─ api.pinzontravel.com ─────▶ pinzon/api
                ├─ ${DROMO_DOMAIN}, www, app, *.tenants ──▶ dromo/web    (+ basic auth + noindex)
                ├─ admin.${DROMO_DOMAIN} ────▶ dromo/admin               (+ basic auth + noindex)
@@ -84,6 +85,7 @@ Dockerfile en su repo de producto hay que crearlas antes del primer deploy:
 | Imagen | Repo origen | Estado |
 |---|---|---|
 | `dizaru` | dizaru-landing (Astro estático → nginx) | Dockerfile + workflow listos |
+| `pinzon-landing` | pinzon-landing (Astro estático → nginx) | Dockerfile + workflow listos |
 | `pinzon-web`, `pinzon-api` | Pinzon (`apps/web`, `apps/api`) | Dockerfiles existentes; falta workflow |
 | `dromo-web`, `dromo-admin`, `dromo-api` | dromo (`apps/web`, `apps/admin`, `apps/api`) | **Faltan Dockerfiles y workflow** |
 
