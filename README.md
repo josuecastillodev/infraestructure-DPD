@@ -60,7 +60,8 @@ Convenciones:
 - Todos los servicios: `restart: unless-stopped`.
 - APIs Node: `mem_limit: 384m` con `NODE_OPTIONS=--max-old-space-size=256`. Los frontends
   son estáticos servidos por nginx (64m).
-- Tags: `pinzon` y `dromo` usan tags inmutables (`v0.1.0`, `v0.2.0`, …); `dizaru` usa `:latest`.
+- Tags: `pinzon` y `dromo` usan tags inmutables (`v0.1.0`, `v0.2.0`, …); las landings
+  (`dizaru`, `pinzon-landing`) usan `:latest`.
 - Certificados: `letsencrypt` (HTTP-01) para dizaru; `letsencrypt-dns` (DNS-01 vía Cloudflare)
   para los wildcards de pinzon y dromo.
 
@@ -77,17 +78,17 @@ DNS-01 de los certificados wildcard necesita una. Por eso:
   **DNS only** (nube gris — Traefik gestiona el TLS, no el proxy de Cloudflare), y un
   API token con `Zone:DNS:Edit` para el `CF_DNS_API_TOKEN` de `traefik/.env`.
 
-### Imágenes pendientes de Dockerfile
+### Imágenes
 
-Este repo asume estas imágenes en `ghcr.io/josuecastillodev`; las que aún no tienen
-Dockerfile en su repo de producto hay que crearlas antes del primer deploy:
+Todas las imágenes viven en `ghcr.io/josuecastillodev` y las construye el CI de cada
+repo de producto (ver [Deploys](#deploys-gitops)):
 
-| Imagen | Repo origen | Estado |
+| Imagen | Repo origen | Tag |
 |---|---|---|
-| `dizaru` | dizaru-landing (Astro estático → nginx) | Dockerfile + workflow listos |
-| `pinzon-landing` | pinzon-landing (Astro estático → nginx) | Dockerfile + workflow listos |
-| `pinzon-web`, `pinzon-api` | Pinzon (`apps/web`, `apps/api`) | Dockerfiles existentes; falta workflow |
-| `dromo-web`, `dromo-admin`, `dromo-api` | dromo (`apps/web`, `apps/admin`, `apps/api`) | **Faltan Dockerfiles y workflow** |
+| `dizaru` | dizaru-landing (Astro estático → nginx) | `:latest` |
+| `pinzon-landing` | pinzon-landing (Astro estático → nginx) | `:latest` |
+| `pinzon-web`, `pinzon-api` | Pinzon (`apps/web`, `apps/api`) | `vX.Y.Z` |
+| `dromo-web`, `dromo-admin`, `dromo-api` | route-platform (`apps/web`, `apps/admin`, `apps/api`) | `vX.Y.Z` |
 
 ### Dependencias externas de dromo
 
@@ -152,26 +153,66 @@ docker compose -f dromo/docker-compose.yml restart pgbouncer
 
 `userlist.txt` está en `.gitignore`: contiene material de autenticación y vive solo en el servidor.
 
-## Operaciones comunes
+## Deploys (GitOps)
 
-### Desplegar una nueva versión (pinzon / dromo)
+Los deploys están automatizados de punta a punta: **nunca hay que entrar al servidor**.
+El gesto depende del tipo de repo:
 
-1. En el repo: editar el tag de la imagen en el `docker-compose.yml` del proyecto
-   (p. ej. `dromo-api:v0.1.0` → `dromo-api:v0.2.0`) y hacer commit + push.
-2. En el servidor:
+| Repo | Gesto | Qué pasa solo |
+|---|---|---|
+| `dizaru-landing` | `git push` a `main` | CI construye `dizaru:latest` → SSH al VPS → `deploy dizaru` |
+| `pinzon-landing` | `git push` a `main` | CI construye `pinzon-landing:latest` → SSH al VPS → `deploy pinzon` |
+| `infraestructure` (este repo) | `git push` a `main` | workflow `deploy.yml` → SSH al VPS → `deploy all` |
+| `Pinzon` / `route-platform` | tag `vX.Y.Z` | CI construye imágenes → job `bump-infra` committea la versión aquí → eso dispara `deploy all` |
+
+### Publicar versión de pinzon / dromo (la forma cómoda)
 
 ```bash
-cd /srv/infraestructure
-git pull
-docker compose -f dromo/docker-compose.yml pull
-docker compose -f dromo/docker-compose.yml up -d
+npm version patch        # o minor / major — crea commit + tag vX.Y.Z
+git push --follow-tags   # empuja el commit a main Y el tag en un solo comando
 ```
 
-Para dizaru (`:latest`) no hay que editar nada: basta `pull && up -d`.
+> **Ojo**: `git push --tags` a secas empuja el tag (y sí detona el deploy) pero NO el
+> commit del bump a `main` — la rama queda desincronizada. Usar siempre `--follow-tags`,
+> o dejarlo como default con `git config --global push.followTags true` y entonces basta
+> `git push` normal.
+
+No hay que editar este repo a mano: el job `bump-infra` del CI del producto actualiza el
+tag de imagen en el `docker-compose.yml` correspondiente (necesita el secret
+`INFRA_PUSH_TOKEN`, un PAT fine-grained con Contents RW solo sobre este repo).
+
+### Cómo funciona por debajo
+
+1. Cada workflow con deploy usa el secret `DEPLOY_SSH_KEY` y entra como `josue@VPS` con
+   una llave **restringida por forced command**: solo puede ejecutar
+   `scripts/deploy-entry.sh`, que únicamente acepta `deploy <traefik|dizaru|pinzon|dromo|all>`
+   (sin pty, sin forwarding). La llave no sirve para nada más.
+2. En el servidor, `scripts/deploy.sh` hace `git pull --ff-only` en `/srv/infraestructure`
+   y luego `docker compose pull && up -d` del stack pedido. Para dromo además recicla
+   pgbouncer y api si la db se recreó.
+3. Ver el avance / relanzar a mano: pestaña **Actions** del repo, o
+   `gh run list` / `gh workflow run deploy.yml` (el workflow de este repo admite
+   `workflow_dispatch`).
 
 > La API de pinzon ejecuta `prisma migrate deploy` en su entrypoint: cada deploy aplica
 > las migraciones pendientes automáticamente. Con `SEED_ON_START=true` además puebla la
 > demo (dejar en `false` tras el primer arranque).
+
+### Deploy manual (fallback)
+
+Si GitHub Actions está caído o hay que forzar algo:
+
+```bash
+ssh josue@VPS
+cd /srv/infraestructure && git pull
+docker compose -f dromo/docker-compose.yml pull
+docker compose -f dromo/docker-compose.yml up -d   # o el stack que toque
+```
+
+`restart` NO relee labels de Traefik ni cambios de `.env`: para eso siempre `up -d`
+(recrea solo lo que cambió) o `up -d --force-recreate` en el servicio afectado.
+
+## Operaciones comunes
 
 ### Ver logs de emisión de certificados
 
