@@ -1,6 +1,6 @@
 services:
   web:
-    image: ghcr.io/josuecastillodev/dromo-web:v0.1.1
+    image: ghcr.io/josuecastillodev/dromo-web:v0.1.2
     restart: unless-stopped
     mem_limit: 64m
     depends_on:
@@ -45,7 +45,7 @@ services:
       - traefik.http.routers.dromo-tenants.service=dromo-web
 
   admin:
-    image: ghcr.io/josuecastillodev/dromo-admin:v0.1.1
+    image: ghcr.io/josuecastillodev/dromo-admin:v0.1.2
     restart: unless-stopped
     mem_limit: 64m
     depends_on:
@@ -66,7 +66,7 @@ services:
       - traefik.http.routers.dromo-admin.service=dromo-admin
 
   api:
-    image: ghcr.io/josuecastillodev/dromo-api:v0.1.1
+    image: ghcr.io/josuecastillodev/dromo-api:v0.1.2
     restart: unless-stopped
     env_file:
       - .env
