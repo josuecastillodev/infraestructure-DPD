@@ -233,7 +233,9 @@ dromo corre en el dominio temporal de DuckDNS. Para pasarlo al dominio real:
 2. En `dromo/.env` del servidor: reemplazar `DROMO_DOMAIN` por el dominio real y
    quitar `DROMO_CERT_RESOLVER` (vuelve al default `letsencrypt-dns` de Cloudflare).
 3. Ajustar el CORS de la API (`apps/api/src/main.ts` hardcodea `*.routeplatform.com`)
-   y publicar nueva versión.
+   y publicar nueva versión. Actualizar también la política CORS del bucket R2
+   `dromo-uploads` (los uploads usan URLs prefirmadas: el navegador sube directo a R2)
+   con el dominio nuevo en `AllowedOrigins`.
 4. `git push` (el deploy sale solo) y revisar en los logs de acme que Traefik emita
    el wildcard del dominio nuevo.
 5. Cuando exista la landing de dromo: repetir el patrón de pinzon (servicio `landing`
