@@ -45,9 +45,9 @@ Internet ──▶ Traefik v3 (:80 → :443)          red externa "proxy"
                ├─ app.pinzontravel.com, *.tenants ─▶ pinzon/web (nginx SPA)
                ├─ api.pinzontravel.com ─────▶ pinzon/api
                ├─ ${DROMO_DOMAIN}, www ────▶ redirect a app. (sin landing aún)
-               ├─ app.${DROMO_DOMAIN}, *.tenants ──▶ dromo/web  (+ basic auth + noindex)
-               ├─ admin.${DROMO_DOMAIN} ────▶ dromo/admin               (+ basic auth + noindex)
-               └─ api.${DROMO_DOMAIN} ──────▶ dromo/api                 (+ basic auth + noindex)
+               ├─ app.${DROMO_DOMAIN}, *.tenants ──▶ dromo/web
+               ├─ admin.${DROMO_DOMAIN} ────▶ dromo/admin
+               └─ api.${DROMO_DOMAIN} ──────▶ dromo/api
 
 Solo en redes internas (sin puertos publicados):
   pinzon/db · dromo/db · dromo/pgbouncer · dromo/redis
@@ -224,36 +224,20 @@ docker compose -f traefik/docker-compose.yml logs -f traefik | grep -i acme
 Los certificados emitidos quedan en `traefik/letsencrypt/acme.json` (HTTP-01) y
 `traefik/letsencrypt/acme-dns.json` (DNS-01).
 
-### Basic auth de dromo: generar el hash
-
-```bash
-htpasswd -nB usuario
-# copiar la salida "usuario:$2y$..." a DROMO_BASIC_AUTH en dromo/.env,
-# entre comillas simples para que los `$` del hash no se interpolen.
-```
-
-Verificar la interpolación con `docker compose -f dromo/docker-compose.yml config`.
-
 ## Lanzamiento de dromo
 
-dromo está en pre-lanzamiento: sin dominio definitivo y protegido por dos middlewares
-de Traefik (basic auth y `X-Robots-Tag: noindex, nofollow`). **Quitar esos dos
-middlewares es el procedimiento de lanzamiento.** Pasos:
+dromo corre en el dominio temporal de DuckDNS. Para pasarlo al dominio real:
 
 1. Comprar el dominio real, delegar sus nameservers a Cloudflare (ver sección [DNS](#dns))
    y apuntar apex, `www`, `app`, `admin`, `api` y wildcard `*` al servidor.
-2. En `dromo/.env` del servidor: reemplazar `DROMO_DOMAIN` por el dominio real.
-3. En `dromo/docker-compose.yml` (en el repo, commit + push + `git pull` en el server):
-   - Eliminar los dos labels que definen los middlewares
-     (`traefik.http.middlewares.dromo-auth.…` y `traefik.http.middlewares.dromo-noindex.…`).
-   - Eliminar todos los labels `…routers.<router>.middlewares=dromo-auth,dromo-noindex`.
-4. Aplicar:
-
-```bash
-docker compose -f dromo/docker-compose.yml up -d
-```
-
-Traefik emitirá el certificado wildcard del nuevo dominio por DNS-01 (revisar logs de acme).
+2. En `dromo/.env` del servidor: reemplazar `DROMO_DOMAIN` por el dominio real y
+   quitar `DROMO_CERT_RESOLVER` (vuelve al default `letsencrypt-dns` de Cloudflare).
+3. Ajustar el CORS de la API (`apps/api/src/main.ts` hardcodea `*.routeplatform.com`)
+   y publicar nueva versión.
+4. `git push` (el deploy sale solo) y revisar en los logs de acme que Traefik emita
+   el wildcard del dominio nuevo.
+5. Cuando exista la landing de dromo: repetir el patrón de pinzon (servicio `landing`
+   en el compose reemplazando el middleware `dromo-to-app` del apex).
 
 ## Agregar una nueva landing
 

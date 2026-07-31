@@ -14,11 +14,6 @@ services:
       - traefik.docker.network=proxy
       # SPA React/Vite servida por nginx (puerto 80 en el contenedor)
       - traefik.http.services.dromo-web.loadbalancer.server.port=80
-      # Middlewares de PRE-LANZAMIENTO (quitar al lanzar; ver README, sección "Lanzamiento de dromo"):
-      # (a) basic auth — el valor viene de DROMO_BASIC_AUTH en .env (generar con htpasswd)
-      # (b) noindex — evita indexación por buscadores antes del lanzamiento
-      - traefik.http.middlewares.dromo-auth.basicauth.users=${DROMO_BASIC_AUTH}
-      - traefik.http.middlewares.dromo-noindex.headers.customresponseheaders.X-Robots-Tag=noindex, nofollow
       # Apex + www: aún no hay landing de dromo → redirect al sistema en app.
       # (cuando exista la landing, reemplazar este redirect por su servicio, como en pinzon)
       - traefik.http.middlewares.dromo-to-app.redirectregex.regex=^https://(www\.)?${DROMO_DOMAIN}/(.*)
@@ -28,14 +23,13 @@ services:
       - traefik.http.routers.dromo-landing.priority=100
       - traefik.http.routers.dromo-landing.entrypoints=websecure
       - traefik.http.routers.dromo-landing.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
-      - traefik.http.routers.dromo-landing.middlewares=dromo-to-app,dromo-noindex
+      - traefik.http.routers.dromo-landing.middlewares=dromo-to-app
       - traefik.http.routers.dromo-landing.service=dromo-web
       # App
       - traefik.http.routers.dromo-app.rule=Host(`app.${DROMO_DOMAIN}`)
       - traefik.http.routers.dromo-app.priority=50
       - traefik.http.routers.dromo-app.entrypoints=websecure
       - traefik.http.routers.dromo-app.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
-      - traefik.http.routers.dromo-app.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-app.service=dromo-web
       # Tenants catch-all: matchea también app., api. y admin., por eso su prioridad es la más baja.
       # Este router declara el certificado wildcard (DNS-01).
@@ -45,7 +39,6 @@ services:
       - traefik.http.routers.dromo-tenants.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
       - traefik.http.routers.dromo-tenants.tls.domains[0].main=${DROMO_DOMAIN}
       - traefik.http.routers.dromo-tenants.tls.domains[0].sans=*.${DROMO_DOMAIN}
-      - traefik.http.routers.dromo-tenants.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-tenants.service=dromo-web
 
   admin:
@@ -66,7 +59,6 @@ services:
       - traefik.http.routers.dromo-admin.priority=50
       - traefik.http.routers.dromo-admin.entrypoints=websecure
       - traefik.http.routers.dromo-admin.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
-      - traefik.http.routers.dromo-admin.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-admin.service=dromo-admin
 
   api:
@@ -95,7 +87,6 @@ services:
       - traefik.http.routers.dromo-api.priority=50
       - traefik.http.routers.dromo-api.entrypoints=websecure
       - traefik.http.routers.dromo-api.tls.certresolver=${DROMO_CERT_RESOLVER:-letsencrypt-dns}
-      - traefik.http.routers.dromo-api.middlewares=dromo-auth,dromo-noindex
       - traefik.http.routers.dromo-api.service=dromo-api
 
   db:
