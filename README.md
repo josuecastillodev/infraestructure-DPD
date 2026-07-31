@@ -268,41 +268,51 @@ Copiar el patrón de `dizaru/`:
 
 El certificado sale solo por HTTP-01 (resolver `letsencrypt`); no hay que tocar Traefik.
 
+## Backups automatizados
+
+`scripts/backup.sh` corre a diario por cron (como `josue`, 09:00 UTC = 3 AM CDMX) y respalda:
+
+- **Pinzon**: `pg_dump` de la DB `pinzon` (gzip).
+- **Dromo**: `pg_dumpall` del cluster completo — control plane, DBs de tenants y roles (gzip).
+- **Configuración no versionada**: los `.env` reales, `dromo/pgbouncer/userlist.txt` y
+  `traefik/letsencrypt/` (los `acme*.json` son de root: se leen vía contenedor alpine).
+
+Retención y destinos:
+
+| Destino | Ruta | Retención |
+|---|---|---|
+| Local (VPS) | `~/backups/AAAA-MM-DD/` | 7 días |
+| Offsite | bucket R2 `dpd-backups` (rclone en docker) | 30 días |
+
+Credenciales de R2: `~/.config/rclone/rclone.conf` en el servidor (600, fuera de git).
+Bitácora: `~/backups/backup.log`. Ejecutar a mano: `/srv/infraestructure/scripts/backup.sh`.
+El script valida integridad (gzip -t, tamaño mínimo) y falla ruidosamente si un dump sale vacío.
+
+No se respalda: Redis de dromo (colas BullMQ, se reencolan) ni las imágenes
+(viven en ghcr.io y se re-descargan con `pull`). Los secretos de negocio de dromo
+en Infisical tienen respaldo propio fuera de este server.
+
 ## Disaster recovery
-
-Qué hay que respaldar (fuera del servidor, de forma periódica):
-
-- **Pinzon** (una sola DB): dump lógico:
-
-  ```bash
-  docker compose -f pinzon/docker-compose.yml exec db pg_dump -U pinzon -d pinzon > pinzon-$(date +%F).sql
-  ```
-
-- **Dromo** (control plane + una DB por tenant): dump del cluster completo:
-
-  ```bash
-  docker compose -f dromo/docker-compose.yml exec db pg_dumpall -U postgres > dromo-$(date +%F).sql
-  ```
-
-- **Los `.env` reales** de cada carpeta y `dromo/pgbouncer/userlist.txt`
-  (no están en git; guardarlos en un gestor de secretos).
-- Los secretos de negocio de dromo viven en **Infisical** (respaldo propio, fuera de este server).
-- `traefik/letsencrypt/` es prescindible: los certificados se re-emiten solos.
-- Redis de dromo guarda colas BullMQ: tolerable perderlo (se reencolan trabajos), no se respalda.
 
 Restauración en un servidor nuevo:
 
-1. Seguir el [bootstrap](#bootstrap-en-un-servidor-nuevo) completo (los `.env` salen del
-   gestor de secretos, no de los example).
+1. Seguir el [bootstrap](#bootstrap-en-un-servidor-nuevo) completo. Los `.env` reales,
+   `userlist.txt` y los certificados salen del `config.tgz` del último backup en R2:
+
+   ```bash
+   docker run --rm -v ~/.config/rclone:/config/rclone -v "$PWD":/data \
+     rclone/rclone copy r2:dpd-backups/AAAA-MM-DD /data
+   tar xzf config.tgz -C /srv/infraestructure
+   ```
 2. Arrancar cada proyecto y restaurar los dumps:
 
    ```bash
-   docker compose -f pinzon/docker-compose.yml exec -T db psql -U pinzon -d pinzon < pinzon-YYYY-MM-DD.sql
-   docker compose -f dromo/docker-compose.yml  exec -T db psql -U postgres -d postgres < dromo-YYYY-MM-DD.sql
+   gunzip -c pinzon.sql.gz | docker compose -f pinzon/docker-compose.yml exec -T db psql -U pinzon -d pinzon
+   gunzip -c dromo.sql.gz  | docker compose -f dromo/docker-compose.yml  exec -T db psql -U postgres -d postgres
    ```
 
    (En dromo, `pg_dumpall` restaura roles y todas las DBs; regenerar después
    `pgbouncer/userlist.txt` como en el bootstrap.)
 3. Verificar certificados en los logs de Traefik y probar cada dominio.
 
-Las imágenes no se respaldan: viven en el registry de GitLab y se re-descargan con `pull`.
+Las imágenes no se respaldan: viven en ghcr.io y se re-descargan con `pull`.
