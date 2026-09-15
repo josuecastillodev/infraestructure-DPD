@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy de los stacks del VPS. Lo invoca el workflow de GitHub Actions vía SSH
 # (llave dedicada con forced command en deploy-entry.sh), o un humano a mano.
-# Uso: deploy.sh [traefik|dizaru|pinzon|dromo|all]
+# Uso: deploy.sh [traefik|dizaru|pinzon|invitacion|dromo|all]
 set -euo pipefail
 
 cd /srv/infraestructure
@@ -28,12 +28,13 @@ deploy_dromo() {
 
 target="${1:-all}"
 case "$target" in
-  traefik|dizaru|pinzon) deploy_stack "$target" ;;
+  traefik|dizaru|pinzon|invitacion) deploy_stack "$target" ;;
   dromo) deploy_dromo ;;
   all)
     deploy_stack traefik
     deploy_stack dizaru
     deploy_stack pinzon
+    deploy_stack invitacion
     deploy_dromo
     ;;
   *) echo "stack desconocido: $target" >&2; exit 1 ;;

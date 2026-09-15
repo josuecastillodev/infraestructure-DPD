@@ -1,0 +1,16 @@
+services:
+  web:
+    image: ghcr.io/josuecastillodev/wedding-invitation:latest
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.invitacion.rule=Host(`invitacion.dizaru.com`)
+      - traefik.http.routers.invitacion.entrypoints=websecure
+      - traefik.http.routers.invitacion.tls.certresolver=letsencrypt
+      - traefik.http.services.invitacion.loadbalancer.server.port=80
+
+networks:
+  proxy:
+    external: true
