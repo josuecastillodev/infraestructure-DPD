@@ -148,6 +148,29 @@ services:
     networks:
       - internal
 
+  osrm:
+    # pin: el formato del grafo .osrm está acoplado a esta versión del binario
+    image: ghcr.io/project-osrm/osrm-backend:v6.0.0
+    # on-failure (no unless-stopped): si data/ faltara o el grafo no cargara,
+    # el binario sale de una; con unless-stopped sería un crash-loop silencioso.
+    restart: "on-failure:3"
+    mem_limit: 768m
+    # mld = multi-level Dijkstra. Grafo regional de Jalisco (no México completo
+    # — el VPS no da la RAM para el preprocesamiento; ver
+    # dromo/brain/learnings/osrm-mld-preprocesamiento-ram.md del repo de producto).
+    command: osrm-routed --algorithm mld --max-table-size 8000 /data/jalisco-latest.osrm
+    volumes:
+      - ./osrm/data:/data:ro
+    healthcheck:
+      # Guadalajara (dentro del extracto de Jalisco).
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/route/v1/driving/-103.3496,20.6597;-103.3444,20.6737"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
 volumes:
   db-data:
   redis-data:
