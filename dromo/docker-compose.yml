@@ -162,8 +162,11 @@ services:
     volumes:
       - ./osrm/data:/data:ro
     healthcheck:
+      # 127.0.0.1 explícito, no "localhost": resuelve a ::1 en este host y
+      # osrm-routed solo escucha IPv4 (0.0.0.0) — con "localhost" el
+      # healthcheck marca unhealthy aunque el servicio responda bien.
       # Guadalajara (dentro del extracto de Jalisco).
-      test: ["CMD", "wget", "-qO-", "http://localhost:5000/route/v1/driving/-103.3496,20.6597;-103.3444,20.6737"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/route/v1/driving/-103.3496,20.6597;-103.3444,20.6737"]
       interval: 10s
       timeout: 5s
       retries: 5
