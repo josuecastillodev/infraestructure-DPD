@@ -68,6 +68,9 @@ services:
       - .env
     environment:
       NODE_OPTIONS: --max-old-space-size=256
+      # CORS del API (apps/api/src/main.ts) permite *.${APP_DOMAIN}; sin esto
+      # cae al default "routeplatform.com" y bloquea todo origen *.dromohub.com.
+      APP_DOMAIN: ${DROMO_DOMAIN}
     mem_limit: 384m
     depends_on:
       db:
